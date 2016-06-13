@@ -18,8 +18,8 @@ typedef struct {
     size_t used;
 } ma_snapshot;
 
-ma_arena *ma_init(size_t size);
-void ma_destroy(ma_arena *arena);
+ma_arena ma_create(void *addr, size_t size);
+void ma_init(void *addr, size_t size, ma_arena *arena);
 
 void *ma_push(ma_arena *arena, size_t size);
 #define ma_push_struct(arena, structure) ma_push(arena, sizeof(structure))

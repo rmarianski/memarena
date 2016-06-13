@@ -1,25 +1,20 @@
-#include <stdlib.h>
 #include <assert.h>
 #include "memarena.h"
 
-ma_arena *ma_init(size_t size) {
-    assert(size > sizeof(ma_arena));
-    ma_arena *result = calloc(1, size);
-    void *base = (char *)result + sizeof(ma_arena);
-    result->base = base;
-    result->used = sizeof(ma_arena);
-    result->size = size;
+ma_arena ma_create(void *addr, size_t size) {
+    ma_arena result;
+    ma_init(addr, size, &result);
     return result;
 }
 
-void ma_destroy(ma_arena *arena) {
+void ma_init(void *addr, size_t size, ma_arena *arena) {
+    arena->base = addr;
+    arena->size = size;
     arena->used = 0;
-    arena->size = 0;
-    free((char *)arena->base - sizeof(ma_arena));
 }
 
 void *ma_push(ma_arena *arena, size_t size) {
-    assert(arena->used + sizeof(ma_arena) + size < arena->size);
+    assert(arena->used + size < arena->size);
     void *result = (unsigned char *)arena->base + arena->used;
     arena->used += size;
     return result;
