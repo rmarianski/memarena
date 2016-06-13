@@ -21,7 +21,7 @@ clean:
 check: $(OBJECTS) check.o
 	$(CC) $(CFLAGS) -o check $(OBJECTS) check.o
 	./check
-	valgrind --leak-check=full ./check
+	valgrind --leak-check=full --track-origins=yes ./check
 
 install: all
 	mkdir -p $(DESTDIR)/include $(DESTDIR)/lib $(DESTDIR)/lib/pkgconfig
