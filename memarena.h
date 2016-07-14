@@ -12,12 +12,14 @@ extern "C" {
 //   - stack
 //   - freelist
 //   - memory pool
+//   - custom
 
 typedef enum {
     MA_LINEAR,
     MA_STACK,
     MA_FREELIST,
     MA_POOL,
+    MA_CUSTOM,
 } ma_alloc_type;
 
 typedef struct {
@@ -50,6 +52,12 @@ typedef struct {
     ma_alloc_pool_entry *used;
     ma_alloc_pool_entry *free;
 } ma_alloc_pool;
+
+typedef struct {
+    void *(*alloc)(ma_ctx *ctx, size_t size);
+    void (*free)(ma_ctx *ctx, void *addr);
+    void *custom_alloc_data;
+} ma_alloc_custom;
 
 typedef struct {
     ma_ctx *ctx;

@@ -1,12 +1,22 @@
 #include <assert.h>
 #include "memarena.h"
 
-void ma_init_allocator_linear(void *addr, size_t size, ma_ctx *ctx) {
-    ctx->type = MA_LINEAR;
+void ma_init_allocator_common(void *addr, size_t size, ma_alloc_type type, ma_ctx *ctx) {
+    ctx->type = type;
     ctx->used = 0;
     ctx->memory = addr;
     ctx->size = size;
     ctx->alloc_data = NULL;
+}
+
+ma_ctx ma_create_allocator_common(void *addr, size_t size, ma_alloc_type type) {
+    ma_ctx result;
+    ma_init_allocator_common(addr, size, type, &result);
+    return result;
+}
+
+void ma_init_allocator_linear(void *addr, size_t size, ma_ctx *ctx) {
+    ma_init_allocator_common(addr, size, MA_LINEAR, ctx);
 }
 
 ma_ctx ma_create_allocator_linear(void *addr, size_t size) {
@@ -16,11 +26,7 @@ ma_ctx ma_create_allocator_linear(void *addr, size_t size) {
 }
 
 void ma_init_allocator_stack(void *addr, size_t size, ma_ctx *ctx) {
-    ctx->type = MA_STACK;
-    ctx->used = 0;
-    ctx->memory = addr;
-    ctx->size = size;
-    ctx->alloc_data = NULL;
+    ma_init_allocator_common(addr, size, MA_STACK, ctx);
 }
 
 ma_ctx ma_create_allocator_stack(void *addr, size_t size) {
@@ -94,6 +100,8 @@ void *ma_alloc(ma_ctx *ctx, size_t size) {
     ma_alloc_pool *pool_alloc_data;
     ma_alloc_pool_entry *pool_entry;
 
+    ma_alloc_custom *custom_alloc_data;
+
     switch (ctx->type) {
     case MA_LINEAR:
     case MA_STACK:
@@ -166,9 +174,13 @@ void *ma_alloc(ma_ctx *ctx, size_t size) {
 
         break;
 
-    default:
-        assert(!"Unknown type");
+    case MA_CUSTOM:
+        custom_alloc_data = (ma_alloc_custom *)ctx->alloc_data;
+        result = custom_alloc_data->alloc(ctx, size);
+        break;
 
+    default:
+        assert(!"ma_alloc: unknown type");
     }
 
     return result;
@@ -180,6 +192,8 @@ void ma_free(ma_ctx *ctx, void *addr) {
 
     ma_alloc_pool_entry *pool, *prev;
     ma_alloc_pool *pool_alloc_data;
+
+    ma_alloc_custom *custom_alloc_data;
 
     switch (ctx->type) {
     case MA_LINEAR:
@@ -225,6 +239,14 @@ void ma_free(ma_ctx *ctx, void *addr) {
         }
 
         break;
+
+    case MA_CUSTOM:
+        custom_alloc_data = (ma_alloc_custom *)ctx->alloc_data;
+        custom_alloc_data->free(ctx, addr);
+        break;
+
+    default:
+        assert(!"ma_free: unknown type");
     }
 }
 

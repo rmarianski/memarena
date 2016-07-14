@@ -33,7 +33,6 @@ void check_alloc_stack(void *mem) {
     ma_free(&ctx, data1);
     char *data2 = ma_alloc(&ctx, 16);
     assert(data1 == data2);
-
 }
 
 void check_alloc_stack_repeated(void *mem) {
@@ -84,7 +83,6 @@ void check_alloc_freelist_repeated(void *mem) {
         ma_free(&ctx, addr[i]);
     }
     assert(ctx.used == 10 * 10 + sizeof(ma_alloc_freelist) + 10 * sizeof(ma_alloc_freelist_entry));
-
 }
 
 void check_alloc_freelist_bestfit(void *mem) {
@@ -142,6 +140,49 @@ void check_alloc_pool_repeated(void *mem) {
     assert(ctx.used == sizeof(ma_alloc_pool));
 }
 
+typedef struct {
+    unsigned int allocs, frees;
+} custom_alloc_data;
+
+void *custom_alloc(ma_ctx *ctx, size_t size) {
+    ma_alloc_custom *custom = (ma_alloc_custom *)ctx->alloc_data;
+    custom_alloc_data *data = (custom_alloc_data *)custom->custom_alloc_data;
+    data->allocs++;
+    return NULL;
+}
+
+void custom_free(ma_ctx *ctx, void *addr) {
+    ma_alloc_custom *custom = (ma_alloc_custom *)ctx->alloc_data;
+    custom_alloc_data *data = (custom_alloc_data *)custom->custom_alloc_data;
+    data->frees++;
+}
+
+void check_alloc_custom(void *mem) {
+    custom_alloc_data data = {0};
+    ma_alloc_custom custom_data = {
+        .alloc = custom_alloc,
+        .free = custom_free,
+        .custom_alloc_data = &data,
+    };
+    ma_ctx ctx = {
+        .type = MA_CUSTOM,
+        .memory = mem,
+        .size = 1024,
+        .alloc_data = &custom_data,
+    };
+
+    assert(data.allocs == 0);
+    assert(data.frees == 0);
+
+    ma_alloc(&ctx, 10);
+    assert(data.allocs == 1);
+    assert(data.frees == 0);
+
+    ma_free(&ctx, NULL);
+    assert(data.allocs == 1);
+    assert(data.frees == 1);
+}
+
 int main() {
     void *mem = malloc(4096);
 
@@ -157,6 +198,8 @@ int main() {
 
     check_alloc_pool(mem);
     check_alloc_pool_repeated(mem);
+
+    check_alloc_custom(mem);
 
     free(mem);
 }
