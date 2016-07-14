@@ -1,35 +1,162 @@
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "memarena.h"
 
-void check_push() {
-    void *mem = calloc(1, 64);
-    ma_arena arena = ma_create(mem, 64);
-    char *data = ma_push(&arena, 4);
+void check_alloc_linear(void *mem) {
+    ma_ctx ctx = ma_create_allocator_linear(mem, 64);
+    char *data = ma_alloc(&ctx, 4);
     strncpy(data, "123", 4);
     assert(strcmp(data, "123") == 0);
-    free(mem);
 }
 
-void check_snapshot() {
-    void *mem = calloc(1, 128);
-    ma_arena arena = ma_create(mem, 128);
-    char *data = ma_push(&arena, 4);
+void check_snapshot(void *mem) {
+    ma_ctx ctx = ma_create_allocator_linear(mem, 128);
+    char *data = ma_alloc(&ctx, 4);
     strncpy(data, "123", 4);
     assert(strcmp(data, "123") == 0);
 
-    size_t used = arena.used;
-    ma_snapshot *snapshot = ma_snapshot_save(&arena);
-    char *chunk = ma_push(&arena, 4);
+    size_t used = ctx.used;
+    ma_linear_snapshot *snapshot = ma_snapshot_save(&ctx);
+    char *chunk = ma_alloc(&ctx, 4);
     assert(strcmp(chunk, data) != 0);
     ma_snapshot_restore(snapshot);
-    char *data_loc = (char *)arena.base + used - 4;
+    char *data_loc = (char *)ctx.memory + used - 4;
     assert(data == data_loc);
-    free(mem);
+}
+
+void check_alloc_stack(void *mem) {
+    ma_ctx ctx = ma_create_allocator_stack(mem, 128);
+
+    char *data1 = ma_alloc(&ctx, 16);
+    ma_free(&ctx, data1);
+    char *data2 = ma_alloc(&ctx, 16);
+    assert(data1 == data2);
+
+}
+
+void check_alloc_stack_repeated(void *mem) {
+    ma_ctx ctx = ma_create_allocator_stack(mem, 256);
+
+    void *addr[10];
+
+    for (int i = 0; i < 10; i++) {
+        addr[i] = ma_alloc(&ctx, 10);
+    }
+    for (int i = 0; i < 10; i++) {
+        ma_free(&ctx, addr[10 - 1 - i]);
+    }
+
+    assert(ctx.used == 0);
+    assert(ctx.memory == mem);
+
+    for (int i = 0; i < 10; i++) {
+        addr[i] = ma_alloc(&ctx, 10);
+        ma_free(&ctx, addr[i]);
+    }
+
+    assert(ctx.used == 0);
+    assert(ctx.memory == mem);
+
+}
+
+void check_alloc_freelist(void *mem) {
+    ma_ctx ctx = ma_create_allocator_freelist(mem, 256);
+    void *freelistmem = ma_alloc(&ctx, 10);
+    ma_free(&ctx, freelistmem);
+    assert(ctx.used == 10 + sizeof(ma_alloc_freelist) + sizeof(ma_alloc_freelist_entry));
+}
+
+void check_alloc_freelist_repeated(void *mem) {
+    ma_ctx ctx = ma_create_allocator_freelist(mem, 1024);
+    void *addr[10];
+    for (int i = 0; i < 10; i++) {
+        addr[i] = ma_alloc(&ctx, 10);
+        ma_free(&ctx, addr[i]);
+    }
+    assert(ctx.used == 10 + sizeof(ma_alloc_freelist) + sizeof(ma_alloc_freelist_entry));
+
+    for (int i = 0; i < 10; i++) {
+        addr[i] = ma_alloc(&ctx, 10);
+    }
+    for (int i = 0; i < 10; i++) {
+        ma_free(&ctx, addr[i]);
+    }
+    assert(ctx.used == 10 * 10 + sizeof(ma_alloc_freelist) + 10 * sizeof(ma_alloc_freelist_entry));
+
+}
+
+void check_alloc_freelist_bestfit(void *mem) {
+    ma_ctx ctx = ma_create_allocator_freelist(mem, 256);
+    void *addr1, *addr2;
+    addr1 = ma_alloc(&ctx, 5);
+    addr2 = ma_alloc(&ctx, 10);
+    ma_free(&ctx, addr1);
+    ma_free(&ctx, addr2);
+
+    addr1 = ma_alloc(&ctx, 5);
+    addr2 = ma_alloc(&ctx, 10);
+    assert(ctx.used == 10 + 5 + sizeof(ma_alloc_freelist) + 2 * sizeof(ma_alloc_freelist_entry));
+
+    ma_free(&ctx, addr1);
+    ma_free(&ctx, addr2);
+
+    assert(ctx.used == 10 + 5 + sizeof(ma_alloc_freelist) + 2 * sizeof(ma_alloc_freelist_entry));
+}
+
+void check_alloc_pool(void *mem) {
+    ma_ctx ctx = ma_create_allocator_pool(mem, 64, 10);
+    assert(ctx.used == sizeof(ma_alloc_pool));
+
+    void *addr = ma_alloc(&ctx, 10);
+    assert(ctx.used == sizeof(ma_alloc_pool) + sizeof(ma_alloc_pool_entry) + 10);
+    ma_free(&ctx, addr);
+
+    assert(ctx.used == sizeof(ma_alloc_pool));
+}
+
+void check_alloc_pool_repeated(void *mem) {
+    ma_ctx ctx = ma_create_allocator_pool(mem, 2048, 10);
+    assert(ctx.used == sizeof(ma_alloc_pool));
+
+    void *addr[10];
+
+    for (int i = 0; i < 10; i++) {
+        addr[i] = ma_alloc(&ctx, 10);
+        assert(ctx.used == sizeof(ma_alloc_pool) + sizeof(ma_alloc_pool_entry) + 10);
+        ma_free(&ctx, addr[i]);
+    }
+    assert(ctx.used == sizeof(ma_alloc_pool));
+
+    for (int i = 0; i < 10; i++) {
+        addr[i] = ma_alloc(&ctx, 10);
+        assert(ctx.used == sizeof(ma_alloc_pool) + (sizeof(ma_alloc_pool_entry) + 10) * (i + 1));
+    }
+
+    for (int i = 0; i < 10; i++) {
+        ma_free(&ctx, addr[i]);
+        assert(ctx.used == sizeof(ma_alloc_pool) + (10 - 1 - i ) * (sizeof(ma_alloc_pool_entry) + 10));
+    }
+
+    assert(ctx.used == sizeof(ma_alloc_pool));
 }
 
 int main() {
-    check_push();
-    check_snapshot();
+    void *mem = malloc(4096);
+
+    check_alloc_linear(mem);
+    check_snapshot(mem);
+
+    check_alloc_stack(mem);
+    check_alloc_stack_repeated(mem);
+
+    check_alloc_freelist(mem);
+    check_alloc_freelist_repeated(mem);
+    check_alloc_freelist_bestfit(mem);
+
+    check_alloc_pool(mem);
+    check_alloc_pool_repeated(mem);
+
+    free(mem);
 }
