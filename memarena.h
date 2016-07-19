@@ -68,17 +68,13 @@ void *ma_alloc(ma_ctx *ctx, size_t size);
 #define ma_alloc_struct(ctx, structure) ma_alloc(ctx, sizeof(structure))
 void ma_free(ma_ctx *ctx, void *addr);
 
-ma_ctx ma_create_allocator_linear(void *addr, size_t size);
-void ma_init_allocator_linear(void *addr, size_t size, ma_ctx *ctx);
+ma_ctx *ma_create_allocator_linear(void *addr, size_t size);
+ma_ctx *ma_create_allocator_stack(void *addr, size_t size);
+ma_ctx *ma_create_allocator_freelist(void *addr, size_t size);
+ma_ctx *ma_create_allocator_pool(void *addr, size_t size, size_t chunk_size);
 
-ma_ctx ma_create_allocator_stack(void *addr, size_t size);
-void ma_init_allocator_stack(void *addr, size_t size, ma_ctx *ctx);
-
-ma_ctx ma_create_allocator_freelist(void *addr, size_t size);
-void ma_init_allocator_freelist(void *addr, size_t size, ma_ctx *ctx);
-
-ma_ctx ma_create_allocator_pool(void *addr, size_t size, size_t chunk_size);
-void ma_init_allocator_pool(void *addr, size_t size, size_t chunk_size, ma_ctx *ctx);
+// responsible for initializing custom data part manually
+ma_ctx *ma_create_allocator_custom(void *addr, size_t size);
 
 ma_linear_snapshot *ma_snapshot_save(ma_ctx *ctx);
 void ma_snapshot_restore(ma_linear_snapshot *snapshot);

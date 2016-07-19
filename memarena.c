@@ -1,73 +1,53 @@
 #include <assert.h>
 #include "memarena.h"
 
-void ma_init_allocator_common(void *addr, size_t size, ma_alloc_type type, ma_ctx *ctx) {
-    ctx->type = type;
-    ctx->used = 0;
-    ctx->memory = addr;
-    ctx->size = size;
-    ctx->alloc_data = NULL;
-}
+ma_ctx *ma_create_allocator_common(void *addr, size_t size, ma_alloc_type type) {
+    assert(size > sizeof(ma_ctx));
 
-ma_ctx ma_create_allocator_common(void *addr, size_t size, ma_alloc_type type) {
-    ma_ctx result;
-    ma_init_allocator_common(addr, size, type, &result);
+    ma_ctx *result = (ma_ctx *)addr;
+    result->type = type;
+    result->memory = addr;
+    result->used = sizeof(ma_ctx);
+    result->size = size;
+
     return result;
 }
 
-void ma_init_allocator_linear(void *addr, size_t size, ma_ctx *ctx) {
-    ma_init_allocator_common(addr, size, MA_LINEAR, ctx);
-}
-
-ma_ctx ma_create_allocator_linear(void *addr, size_t size) {
-    ma_ctx result;
-    ma_init_allocator_linear(addr, size, &result);
+ma_ctx *ma_create_allocator_linear(void *addr, size_t size) {
+    ma_ctx *result = ma_create_allocator_common(addr, size, MA_LINEAR);
+    result->alloc_data = NULL;
     return result;
 }
 
-void ma_init_allocator_stack(void *addr, size_t size, ma_ctx *ctx) {
-    ma_init_allocator_common(addr, size, MA_STACK, ctx);
-}
-
-ma_ctx ma_create_allocator_stack(void *addr, size_t size) {
-    ma_ctx result;
-    ma_init_allocator_stack(addr, size, &result);
+ma_ctx *ma_create_allocator_stack(void *addr, size_t size) {
+    ma_ctx *result = ma_create_allocator_common(addr, size, MA_STACK);
+    result->alloc_data = NULL;
     return result;
 }
 
-void ma_init_allocator_freelist(void *addr, size_t size, ma_ctx *ctx) {
-    ma_alloc_freelist *freelist_alloc_data = (ma_alloc_freelist *)addr;
+ma_ctx *ma_create_allocator_freelist(void *addr, size_t size) {
+    ma_ctx *result = ma_create_allocator_common(addr, size, MA_FREELIST);
+    ma_alloc_freelist *freelist_alloc_data = (ma_alloc_freelist *)((unsigned char *)addr + sizeof(ma_ctx));
+    result->used += sizeof(ma_alloc_freelist);
+    result->alloc_data = freelist_alloc_data;
     freelist_alloc_data->freelist = NULL;
-
-    ctx->type = MA_FREELIST;
-    ctx->used = sizeof(ma_alloc_freelist);
-    ctx->memory = (unsigned char *)addr + sizeof(ma_alloc_freelist);
-    ctx->size = size;
-    ctx->alloc_data = freelist_alloc_data;
-}
-
-ma_ctx ma_create_allocator_freelist(void *addr, size_t size) {
-    ma_ctx result;
-    ma_init_allocator_freelist(addr, size, &result);
     return result;
 }
 
-void ma_init_allocator_pool(void *addr, size_t total_size, size_t chunk_size, ma_ctx *ctx) {
+ma_ctx *ma_create_allocator_pool(void *addr, size_t total_size, size_t chunk_size) {
     assert(total_size > chunk_size);
+    ma_ctx *result = ma_create_allocator_common(addr, total_size, MA_POOL);
 
-    ma_alloc_pool *pool_alloc_data = (ma_alloc_pool *)addr;
+    ma_alloc_pool *pool_alloc_data = (ma_alloc_pool *)((unsigned char *)addr + sizeof(ma_ctx));
+    result->used += sizeof(ma_alloc_pool);
+    result->alloc_data = pool_alloc_data;
     pool_alloc_data->chunk_size = chunk_size;
     pool_alloc_data->used = NULL;
 
     size_t num_pool_elements = (total_size - sizeof(ma_alloc_pool)) / (chunk_size + sizeof(ma_alloc_pool_entry));
     assert(num_pool_elements > 0);
 
-    ctx->type = MA_POOL;
-    ctx->used = sizeof(ma_alloc_pool);
-    ctx->size = total_size;
-    ctx->alloc_data = pool_alloc_data;
-
-    unsigned char *memory = (unsigned char *)addr + sizeof(ma_alloc_pool);
+    unsigned char *memory = (unsigned char *)addr + result->used;
     ma_alloc_pool_entry *prev = NULL;
 
     for (size_t i = 0; i < num_pool_elements; i++) {
@@ -80,11 +60,7 @@ void ma_init_allocator_pool(void *addr, size_t total_size, size_t chunk_size, ma
         prev = entry;
         memory += chunk_size + sizeof(ma_alloc_pool_entry);
     }
-}
 
-ma_ctx ma_create_allocator_pool(void *addr, size_t total_size, size_t chunk_size) {
-    ma_ctx result;
-    ma_init_allocator_pool(addr, total_size, chunk_size, &result);
     return result;
 }
 
