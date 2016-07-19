@@ -27,7 +27,7 @@ ma_ctx *ma_create_allocator_stack(void *addr, size_t size) {
 
 ma_ctx *ma_create_allocator_freelist(void *addr, size_t size) {
     ma_ctx *result = ma_create_allocator_common(addr, size, MA_FREELIST);
-    ma_alloc_freelist *freelist_alloc_data = (ma_alloc_freelist *)((unsigned char *)addr + sizeof(ma_ctx));
+    ma_alloc_freelist *freelist_alloc_data = (ma_alloc_freelist *)((char *)addr + sizeof(ma_ctx));
     result->used += sizeof(ma_alloc_freelist);
     result->alloc_data = freelist_alloc_data;
     freelist_alloc_data->freelist = NULL;
@@ -38,7 +38,7 @@ ma_ctx *ma_create_allocator_pool(void *addr, size_t total_size, size_t chunk_siz
     assert(total_size > chunk_size);
     ma_ctx *result = ma_create_allocator_common(addr, total_size, MA_POOL);
 
-    ma_alloc_pool *pool_alloc_data = (ma_alloc_pool *)((unsigned char *)addr + sizeof(ma_ctx));
+    ma_alloc_pool *pool_alloc_data = (ma_alloc_pool *)((char *)addr + sizeof(ma_ctx));
     result->used += sizeof(ma_alloc_pool);
     result->alloc_data = pool_alloc_data;
     pool_alloc_data->chunk_size = chunk_size;
@@ -47,7 +47,7 @@ ma_ctx *ma_create_allocator_pool(void *addr, size_t total_size, size_t chunk_siz
     size_t num_pool_elements = (total_size - sizeof(ma_alloc_pool)) / (chunk_size + sizeof(ma_alloc_pool_entry));
     assert(num_pool_elements > 0);
 
-    unsigned char *memory = (unsigned char *)addr + result->used;
+    char *memory = (char *)addr + result->used;
     ma_alloc_pool_entry *prev = NULL;
 
     for (size_t i = 0; i < num_pool_elements; i++) {
@@ -82,7 +82,7 @@ void *ma_alloc(ma_ctx *ctx, size_t size) {
     case MA_LINEAR:
     case MA_STACK:
         assert(ctx->used + size <= ctx->size);
-        result = (unsigned char *)ctx->memory + ctx->used;
+        result = (char *)ctx->memory + ctx->used;
         ctx->used += size;
         break;
     case MA_FREELIST:
@@ -116,15 +116,15 @@ void *ma_alloc(ma_ctx *ctx, size_t size) {
             } else {
                 freelist_alloc_data->freelist = best_freelist_entry->next;
             }
-            result = (unsigned char *)best_freelist_entry + sizeof(ma_alloc_freelist_entry);
+            result = (char *)best_freelist_entry + sizeof(ma_alloc_freelist_entry);
             best_freelist_entry->next = NULL;
         } else {
             assert(ctx->used + size + sizeof(ma_alloc_freelist_entry) <= ctx->size);
 
-            freelist_entry = (ma_alloc_freelist_entry *)((unsigned char *)ctx->memory + ctx->used);
+            freelist_entry = (ma_alloc_freelist_entry *)((char *)ctx->memory + ctx->used);
             freelist_entry->chunk_size = size;
             freelist_entry->next = NULL;
-            result = (unsigned char *)ctx->memory + ctx->used + sizeof(ma_alloc_freelist_entry);
+            result = (char *)ctx->memory + ctx->used + sizeof(ma_alloc_freelist_entry);
 
             ctx->used += size + sizeof(ma_alloc_freelist_entry);
         }
@@ -146,7 +146,7 @@ void *ma_alloc(ma_ctx *ctx, size_t size) {
 
         ctx->used += pool_alloc_data->chunk_size + sizeof(ma_alloc_pool_entry);
 
-        result = (unsigned char *)pool_entry + sizeof(ma_alloc_pool_entry);
+        result = (char *)pool_entry + sizeof(ma_alloc_pool_entry);
 
         break;
 
@@ -175,13 +175,13 @@ void ma_free(ma_ctx *ctx, void *addr) {
     case MA_LINEAR:
         break;
     case MA_STACK:
-        ctx->used -= ((unsigned char *)ctx->memory + ctx->used) - (unsigned char *)addr;
+        ctx->used -= ((char *)ctx->memory + ctx->used) - (char *)addr;
         break;
     case MA_FREELIST:
 
         freelist_alloc_data = (ma_alloc_freelist *)ctx->alloc_data;
 
-        freelist_entry = (ma_alloc_freelist_entry *)((unsigned char *)addr - sizeof(ma_alloc_freelist_entry));
+        freelist_entry = (ma_alloc_freelist_entry *)((char *)addr - sizeof(ma_alloc_freelist_entry));
         freelist_entry->next = freelist_alloc_data->freelist;
         freelist_alloc_data->freelist = freelist_entry;
 
@@ -196,7 +196,7 @@ void ma_free(ma_ctx *ctx, void *addr) {
         while (1) {
             assert(pool);
 
-            if (((unsigned char *)pool + sizeof(ma_alloc_pool_entry)) == addr) {
+            if (((char *)pool + sizeof(ma_alloc_pool_entry)) == addr) {
                 if (prev) {
                     prev->next = pool->next;
                 } else {
