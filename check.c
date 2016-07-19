@@ -60,6 +60,32 @@ void check_alloc_stack_repeated(void *mem) {
 
 }
 
+void check_alloc_linkedlist(void *mem) {
+    ma_ctx *ctx = ma_create_allocator_linkedlist(mem, 1024);
+
+    void *linkedlistmem = ma_alloc(ctx, 10);
+    assert(ctx->used == sizeof(ma_ctx) + sizeof(ma_alloc_linkedlist) + sizeof(ma_alloc_linkedlist_entry) + 10);
+
+    ma_free(ctx, linkedlistmem);
+    assert(ctx->used == sizeof(ma_ctx) + sizeof(ma_alloc_linkedlist));
+}
+
+void check_alloc_linkedlist_repeated(void *mem) {
+    ma_ctx *ctx = ma_create_allocator_linkedlist(mem, 2048);
+
+    void *addr[10];
+    for (int i = 0; i < 10; i++) {
+        addr[i] = ma_alloc(ctx, 10);
+        assert(ctx->used == sizeof(ma_ctx) + sizeof(ma_alloc_linkedlist) + sizeof(ma_alloc_linkedlist_entry) + 10 * (i + 1));
+    }
+
+    for (int i = 0; i < 10; i++) {
+        assert(ctx->used == sizeof(ma_ctx) + sizeof(ma_alloc_linkedlist) + sizeof(ma_alloc_linkedlist_entry) + 10 * (10 - 1 - i));
+        ma_free(ctx, addr[i]);
+    }
+    assert(ctx->used == sizeof(ma_ctx) + sizeof(ma_alloc_linkedlist));
+}
+
 void check_alloc_freelist(void *mem) {
     ma_ctx *ctx = ma_create_allocator_freelist(mem, 256);
     void *freelistmem = ma_alloc(ctx, 10);
@@ -191,6 +217,8 @@ int main() {
 
     check_alloc_stack(mem);
     check_alloc_stack_repeated(mem);
+
+    check_alloc_linkedlist(mem);
 
     check_alloc_freelist(mem);
     check_alloc_freelist_repeated(mem);

@@ -10,6 +10,7 @@ extern "C" {
 // allocators:
 //   - linear
 //   - stack
+//   - linkedlist
 //   - freelist
 //   - memory pool
 //   - custom
@@ -17,6 +18,7 @@ extern "C" {
 typedef enum {
     MA_LINEAR,
     MA_STACK,
+    MA_LINKEDLIST,
     MA_FREELIST,
     MA_POOL,
     MA_CUSTOM,
@@ -32,13 +34,22 @@ typedef struct {
 
 // linear doesn't need custom allocator space, nor does stack
 
+typedef struct ma_alloc_linkedlist_entry {
+    size_t chunk_size;
+    struct ma_alloc_linkedlist_entry *next;
+} ma_alloc_linkedlist_entry;
+
+typedef struct {
+    ma_alloc_linkedlist_entry *list;
+} ma_alloc_linkedlist;
+
 typedef struct ma_alloc_freelist_entry {
     // the memory is assumed to be located immediately after the entry
     size_t chunk_size;
     struct ma_alloc_freelist_entry *next;
 } ma_alloc_freelist_entry;
 
-typedef struct ma_alloc_freelist {
+typedef struct {
     ma_alloc_freelist_entry *freelist;
 } ma_alloc_freelist;
 
@@ -70,6 +81,7 @@ void ma_free(ma_ctx *ctx, void *addr);
 
 ma_ctx *ma_create_allocator_linear(void *addr, size_t size);
 ma_ctx *ma_create_allocator_stack(void *addr, size_t size);
+ma_ctx *ma_create_allocator_linkedlist(void *addr, size_t size);
 ma_ctx *ma_create_allocator_freelist(void *addr, size_t size);
 ma_ctx *ma_create_allocator_pool(void *addr, size_t size, size_t chunk_size);
 

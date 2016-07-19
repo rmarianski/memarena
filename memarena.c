@@ -25,6 +25,15 @@ ma_ctx *ma_create_allocator_stack(void *addr, size_t size) {
     return result;
 }
 
+ma_ctx *ma_create_allocator_linkedlist(void *addr, size_t size) {
+    ma_ctx *result = ma_create_allocator_common(addr, size, MA_LINKEDLIST);
+    ma_alloc_linkedlist *linkedlist_alloc_data = (ma_alloc_linkedlist *)((char *)addr + sizeof(ma_ctx));
+    result->used += sizeof(ma_alloc_linkedlist);
+    result->alloc_data = linkedlist_alloc_data;
+    linkedlist_alloc_data->list = NULL;
+    return result;
+}
+
 ma_ctx *ma_create_allocator_freelist(void *addr, size_t size) {
     ma_ctx *result = ma_create_allocator_common(addr, size, MA_FREELIST);
     ma_alloc_freelist *freelist_alloc_data = (ma_alloc_freelist *)((char *)addr + sizeof(ma_ctx));
@@ -70,6 +79,9 @@ void *ma_alloc(ma_ctx *ctx, size_t size) {
 
     void *result;
 
+    ma_alloc_linkedlist *linkedlist_alloc_data;
+    ma_alloc_linkedlist_entry *linkedlist_entry;
+
     ma_alloc_freelist *freelist_alloc_data;
     ma_alloc_freelist_entry *freelist_entry, *freelist_entry_prev, *best_freelist_entry, *best_freelist_entry_prev;
 
@@ -79,12 +91,28 @@ void *ma_alloc(ma_ctx *ctx, size_t size) {
     ma_alloc_custom *custom_alloc_data;
 
     switch (ctx->type) {
+
     case MA_LINEAR:
     case MA_STACK:
         assert(ctx->used + size <= ctx->size);
         result = (char *)ctx->memory + ctx->used;
         ctx->used += size;
         break;
+
+    case MA_LINKEDLIST:
+        assert(ctx->used + size + sizeof(ma_alloc_linkedlist_entry) <= ctx->size);
+
+        linkedlist_alloc_data = (ma_alloc_linkedlist *)ctx->alloc_data;
+
+        linkedlist_entry = (ma_alloc_linkedlist_entry *)((char *)ctx->memory + ctx->used);
+        linkedlist_entry->next = linkedlist_alloc_data->list;
+        linkedlist_alloc_data->list = linkedlist_entry;
+
+        result = (char *)ctx->memory + ctx->used + sizeof(ma_alloc_linkedlist_entry);
+        ctx->used += sizeof(ma_alloc_linkedlist_entry) + size;
+
+        break;
+
     case MA_FREELIST:
 
         freelist_alloc_data = (ma_alloc_freelist *)ctx->alloc_data;
@@ -163,6 +191,9 @@ void *ma_alloc(ma_ctx *ctx, size_t size) {
 }
 
 void ma_free(ma_ctx *ctx, void *addr) {
+    ma_alloc_linkedlist_entry *linkedlist_entry, *linkedlist_entry_prev;
+    ma_alloc_linkedlist *linkedlist_alloc_data;
+
     ma_alloc_freelist_entry *freelist_entry;
     ma_alloc_freelist *freelist_alloc_data;
 
@@ -172,11 +203,36 @@ void ma_free(ma_ctx *ctx, void *addr) {
     ma_alloc_custom *custom_alloc_data;
 
     switch (ctx->type) {
+
     case MA_LINEAR:
         break;
+
     case MA_STACK:
         ctx->used -= ((char *)ctx->memory + ctx->used) - (char *)addr;
         break;
+
+    case MA_LINKEDLIST:
+        linkedlist_alloc_data = (ma_alloc_linkedlist *)ctx->alloc_data;
+
+        linkedlist_entry = linkedlist_alloc_data->list;
+        linkedlist_entry_prev = NULL;
+
+        while (linkedlist_entry) {
+            if (((char *)linkedlist_entry + sizeof(ma_alloc_linkedlist_entry)) == addr) {
+                if (linkedlist_entry_prev)
+                    linkedlist_entry_prev->next = linkedlist_entry->next;
+                else
+                    linkedlist_alloc_data->list = linkedlist_entry->next;
+
+                break;
+            }
+        }
+
+        if (!linkedlist_alloc_data->list)
+            ctx->used = sizeof(ma_ctx) + sizeof(ma_alloc_linkedlist);
+
+        break;
+
     case MA_FREELIST:
 
         freelist_alloc_data = (ma_alloc_freelist *)ctx->alloc_data;
